@@ -5,10 +5,6 @@ from src.infrastructure.repositories.sqlite_product_repository import (
 from src.infrastructure.repositories.sqlite_person_repository import (
     SqlitePersonRepository,
 )
-from src.infrastructure.repositories.sqlite_emitted_pay import SqliteEmittedPay
-from src.infrastructure.repositories.sqlite_received_pay_repository import (
-    SqliteReceivedPay,
-)
 from src.application.services.register_product_use_case import RegisterProductUseCase
 from src.application.services.find_all_products_use_case import FindAllProductsUseCase
 from src.presentation.controllers.inventory_controller import InventoryController
@@ -16,9 +12,14 @@ from src.application.services.update_product_use_case import UpdateProductUseCas
 from src.application.services.delete_product_use_case import DeleteProductUseCase
 from src.application.services.save_person_use_case import SavePersonUseCase
 from src.application.services.update_person_use_case import UpdatePersonUseCase
+from src.application.services.find_by_ids_person_use_case import FindByIdsPersonUseCase
 from src.application.services.delete_person_use_case import DeletePersonUseCase
 from src.application.services.find_all_person_use_case import FindAllPersonUseCase
 from src.presentation.controllers.persons_controller import PersonController
+from src.infrastructure.repositories.sqlite_emitted_pay import SqliteEmittedPay
+from src.infrastructure.repositories.sqlite_received_pay_repository import (
+    SqliteReceivedPay,
+)
 from src.application.services.save_emitted_pay_use_case import SaveEmittedPayUseCase
 from src.application.services.find_all_emitted_pay_use_case import (
     FindAllEmittedPayUseCase,
@@ -35,8 +36,7 @@ from src.application.services.update_received_pay_use_case import (
 from src.application.services.delete_received_pay_use_case import (
     DeleteReceivedPayUseCase,
 )
-from src.presentation.controllers.registers_controller import RegistersController
-from src.presentation.controllers.data_controller import DataController
+from src.presentation.controllers.pays_controller import PaysController
 
 
 class AppHandler:
@@ -44,15 +44,7 @@ class AppHandler:
         self.window = window
         self._setup_inventory()
         self._setup_persons()
-        self._setup_registers()
-        self._setup_data()
-
-        self.window.navBar.ui.toolButton_3.clicked.connect(
-            self.data_controller.refresh_analytics
-        )
-        self.window.navBar.ui.toolButton_4.clicked.connect(
-            self.registers_controller.load_pays
-        )
+        self._setup_pays()
 
     def _setup_inventory(self):
         product_repo = SqliteProductRepository()
@@ -76,11 +68,11 @@ class AppHandler:
             self.window.personsView, register_uc, find_all_uc, update_uc, delete_uc
         )
 
-    def _setup_registers(self):
+    def _setup_pays(self):
         emitted_repo = SqliteEmittedPay()
         received_repo = SqliteReceivedPay()
 
-        self.registers_controller = RegistersController(
+        self.pays_controller = PaysController(
             self.window.registersView,
             SaveEmittedPayUseCase(emitted_repo),
             FindAllEmittedPayUseCase(emitted_repo),
@@ -90,18 +82,4 @@ class AppHandler:
             FindAllReceivedPayUseCase(received_repo),
             UpdateReceivedPayUseCase(received_repo),
             DeleteReceivedPayUseCase(received_repo),
-        )
-
-    def _setup_data(self):
-        product_repo = SqliteProductRepository()
-        persons_repo = SqlitePersonRepository()
-        emitted_repo = SqliteEmittedPay()
-        received_repo = SqliteReceivedPay()
-
-        self.data_controller = DataController(
-            self.window.dataView,
-            FindAllProductsUseCase(product_repo),
-            FindAllPersonUseCase(persons_repo),
-            FindAllEmittedPayUseCase(emitted_repo),
-            FindAllReceivedPayUseCase(received_repo),
         )

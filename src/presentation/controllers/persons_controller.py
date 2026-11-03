@@ -1,3 +1,4 @@
+import pandas as pd
 from ui.views.persons_view import PersonsView
 from src.application.services.delete_person_use_case import DeletePersonUseCase
 from src.application.services.find_all_person_use_case import FindAllPersonUseCase
@@ -17,6 +18,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QPushButton,
     QInputDialog,
+    QFileDialog,
 )
 
 
@@ -37,11 +39,74 @@ class PersonController:
         self.delete_uc = delete_uc
         self.view.ui.listView.setModel(self.list_model)
 
+        self.export_btn = QPushButton("EXPORTAR")
+        self.import_btn = QPushButton("IMPORTAR")
+        self.view.ui.horizontalLayout.addWidget(self.export_btn)
+        self.view.ui.horizontalLayout.addWidget(self.import_btn)
+
         self.view.ui.pushButton_2.clicked.connect(self.open_add_dialog)
         self.view.ui.pushButton.clicked.connect(self.search_persons)
         self.view.ui.lineEdit.textChanged.connect(self.search_persons)
         self.view.ui.pushButton_3.clicked.connect(self.filter_persons)
+        self.export_btn.clicked.connect(self.export_persons)
+        self.import_btn.clicked.connect(self.import_persons)
         self.load_persons()
+
+    def export_persons(self):
+        file_path, _ = QFileDialog.getSaveFileName(
+            self.view, "Exportar Terceros", "terceros.csv", "CSV (*.csv)"
+        )
+        if not file_path:
+            return
+        persons = self.find_all_uc.execute() or []
+        rows = [
+            {
+                "id": str(p.person_id),
+                "identification": str(p.identification),
+                "name": str(p.name),
+                "email": str(p.email),
+                "phone": str(p.phone.value),
+                "postal_code": str(p.phone.postal_code),
+                "address": ";".join(str(a) for a in p.address),
+                "role": str(p.role),
+            }
+            for p in persons
+        ]
+        pd.DataFrame(rows).to_csv(file_path, index=False)
+        QMessageBox.information(self.view, "Exportado", f"Guardado en {file_path}")
+
+    def import_persons(self):
+        file_path, _ = QFileDialog.getOpenFileName(
+            self.view, "Importar Terceros", "", "CSV (*.csv)"
+        )
+        if not file_path:
+            return
+        try:
+            df = pd.read_csv(file_path, dtype=str)
+            for _, row in df.iterrows():
+                person = Person(
+                    person_id=NonEmptyString(str(row["id"])),
+                    identification=NonEmptyString(str(row["identification"])),
+                    name=NonEmptyString(str(row["name"])),
+                    email=NonEmptyString(str(row["email"])),
+                    phone=Phone(
+                        value=NonEmptyString(str(row["phone"])),
+                        postal_code=NonEmptyString(str(row["postal_code"])),
+                    ),
+                    address=[
+                        NonEmptyString(a.strip())
+                        for a in str(row["address"]).split(";")
+                        if a.strip()
+                    ],
+                    role=NonEmptyString(str(row["role"])),
+                )
+                self.register_uc.execute(person)
+            self.load_persons()
+            QMessageBox.information(
+                self.view, "Importado", "Datos importados con éxito"
+            )
+        except Exception as e:
+            QMessageBox.warning(self.view, "Error al importar", str(e))
 
     def open_add_dialog(self):
         dialog = PersonDialog(self.view)

@@ -65,7 +65,7 @@ class PersonDialog(QDialog):
         form_layout.addRow("Identificacion:", self.identificacion_input)
         form_layout.addRow("Nombre:", self.name_input)
         form_layout.addRow("Correo electrónico:", self.email_input)
-        form_layout.addRow("Código Postal:", self.postal_code_input)
+        form_layout.addRow("Codigó:", self.postal_code_input)
         form_layout.addRow("Número de teléfono:", self.phone_input)
         form_layout.addRow("Dirección (;):", self.address_input)
         form_layout.addRow("Rol:", self.role_input)

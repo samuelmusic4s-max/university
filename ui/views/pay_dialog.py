@@ -128,6 +128,16 @@ class PayDialog(QDialog):
             self.reason_input.setText(str(pay.reason))
             self.is_advance_input.setChecked(bool(pay.is_advance))
             self.url_input.setText(str(pay.url))
+            pixmap = QPixmap(str(pay.url))
+            if not pixmap.isNull():
+                self.img_preview_lbl.setPixmap(
+                    pixmap.scaled(
+                        120,
+                        120,
+                        Qt.AspectRatioMode.KeepAspectRatio,
+                        Qt.TransformationMode.SmoothTransformation,
+                    )
+                )
 
             if isinstance(pay, EmittedPay):
                 self.specific_id_input.setText(str(pay.pay_emitted_id))

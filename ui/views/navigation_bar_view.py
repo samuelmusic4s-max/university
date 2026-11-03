@@ -16,5 +16,5 @@ class NavigationBarView(QWidget):
         self.setMinimumWidth(170)
         self.ui.toolButton.setIcon(QIcon(str(icons_dir / "inventory.svg")))
         self.ui.toolButton_2.setIcon(QIcon(str(icons_dir / "persons.svg")))
-        self.ui.toolButton_3.setIcon(QIcon(str(icons_dir / "analytics.svg")))
+        self.ui.toolButton_3.hide()
         self.ui.toolButton_4.setIcon(QIcon(str(icons_dir / "supports.svg")))

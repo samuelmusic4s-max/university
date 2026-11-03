@@ -1,33 +1,6 @@
 from pathlib import Path
 import pandas as pd
-from PySide6.QtCore import QSize, Qt
-from PySide6.QtGui import (
-    QIcon,
-    QImage,
-    QPainter,
-    QPdfWriter,
-    QPixmap,
-    QStandardItem,
-    QStandardItemModel,
-    QTextDocument,
-)
-from PySide6.QtWidgets import (
-    QFileDialog,
-    QHBoxLayout,
-    QInputDialog,
-    QLabel,
-    QListView,
-    QMessageBox,
-    QPushButton,
-    QSlider,
-    QVBoxLayout,
-    QWidget,
-)
 from ui.views.registers_view import RegistersView
-from ui.views.pay_dialog import PayDialog
-from src.domain.entities.emitted_pay import EmittedPay
-from src.domain.entities.received_pay import ReceivedPay
-from src.domain.value_objects.non_empty_string import NonEmptyString
 from src.application.services.save_emitted_pay_use_case import SaveEmittedPayUseCase
 from src.application.services.find_all_emitted_pay_use_case import (
     FindAllEmittedPayUseCase,
@@ -44,9 +17,36 @@ from src.application.services.update_received_pay_use_case import (
 from src.application.services.delete_received_pay_use_case import (
     DeleteReceivedPayUseCase,
 )
+from PySide6.QtGui import (
+    QIcon,
+    QImage,
+    QPainter,
+    QStandardItem,
+    QStandardItemModel,
+    QPixmap,
+    QPdfWriter,
+    QTextDocument,
+)
+from ui.views.pay_dialog import PayDialog
+from src.domain.entities.emitted_pay import EmittedPay
+from src.domain.entities.received_pay import ReceivedPay
+from src.domain.value_objects.non_empty_string import NonEmptyString
+from PySide6.QtCore import QSize, Qt
+from PySide6.QtWidgets import (
+    QMessageBox,
+    QWidget,
+    QHBoxLayout,
+    QVBoxLayout,
+    QPushButton,
+    QInputDialog,
+    QListView,
+    QLabel,
+    QSlider,
+    QFileDialog,
+)
 
 
-class RegistersController:
+class PaysController:
     def __init__(
         self,
         view: RegistersView,
@@ -60,38 +60,33 @@ class RegistersController:
         delete_received_uc: DeleteReceivedPayUseCase,
     ):
         self.view = view
+
         self.save_emitted_uc = save_emitted_uc
         self.find_all_emitted_uc = find_all_emitted_uc
         self.update_emitted_uc = update_emitted_uc
         self.delete_emitted_uc = delete_emitted_uc
+
         self.save_received_uc = save_received_uc
         self.find_all_received_uc = find_all_received_uc
         self.update_received_uc = update_received_uc
         self.delete_received_uc = delete_received_uc
 
         self.current_mode = "emitted"
-        self.current_preview_path = ""
+        self.current_image = ""
+        self.current_pays: list[EmittedPay | ReceivedPay] = []
 
-        self.metrics_model = QStandardItemModel()
-        self.view.ui.listView.setModel(self.metrics_model)
+        self.top_model = QStandardItemModel()
+        self.view.ui.listView.setModel(self.top_model)
         self.view.ui.listView.setFlow(QListView.Flow.LeftToRight)
-        self.view.ui.listView.setSpacing(10)
 
         self.list_model = QStandardItemModel()
         self.view.ui.listView_2.setModel(self.list_model)
         self.view.ui.listView_2.setIconSize(QSize(48, 48))
+        self.view.ui.listView_2.clicked.connect(self._on_item_clicked)
 
-        preview_layout = QVBoxLayout(self.view.ui.widget_2)
-        self.preview_lbl = QLabel("Seleccione un soporte")
-        self.preview_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.zoom_slider = QSlider(Qt.Orientation.Horizontal)
-        self.zoom_slider.setMinimum(80)
-        self.zoom_slider.setMaximum(320)
-        self.zoom_slider.setValue(180)
-        self.zoom_slider.valueChanged.connect(self.update_preview_zoom)
-        preview_layout.addWidget(self.preview_lbl)
-        preview_layout.addWidget(QLabel("Zoom:"))
-        preview_layout.addWidget(self.zoom_slider)
+        self.image_label = self.view.image_label
+        self.slider = self.view.slider
+        self.slider.valueChanged.connect(self.change_zoom)
 
         self.view.ui.pushButton_6.clicked.connect(lambda: self.switch_mode("emitted"))
         self.view.ui.pushButton_5.clicked.connect(lambda: self.switch_mode("received"))
@@ -106,46 +101,77 @@ class RegistersController:
         self.current_mode = mode
         self.load_pays()
 
-    def update_metrics(self):
-        emitted = self.find_all_emitted_uc.execute() or []
-        received = self.find_all_received_uc.execute() or []
-        total_compras = sum(p.amount for p in emitted)
-        total_ventas = sum(
-            (p.net_amount if p.net_amount is not None else p.amount) for p in received
-        )
-        balance = total_ventas - total_compras
+    def load_top_metrics(self):
+        compras_list = self.find_all_emitted_uc.execute() or []
+        ventas_list = self.find_all_received_uc.execute() or []
+        total_compras = sum(p.amount for p in compras_list)
+        total_ventas = sum((p.net_amount or p.amount) for p in ventas_list)
 
-        self.metrics_model.clear()
-        cards = [
-            f"Total Compras\n${total_compras:,.2f} ({len(emitted)})",
-            f"Total Ventas\n${total_ventas:,.2f} ({len(received)})",
-            f"Balance Neto\n${balance:,.2f}",
-            f"Total Soportes\n{len(emitted) + len(received)} docs",
+        self.top_model.clear()
+        texts = [
+            f"Compras\n${total_compras:,.2f}",
+            f"Ventas\n${total_ventas:,.2f}",
+            f"Balance\n${total_ventas - total_compras:,.2f}",
+            f"Total Soportes\n{len(compras_list) + len(ventas_list)}",
         ]
-        for text in cards:
-            item = QStandardItem(text)
+        for t in texts:
+            item = QStandardItem(t)
             item.setEditable(False)
-            item.setSizeHint(QSize(165, 70))
-            self.metrics_model.appendRow(item)
+            item.setSizeHint(QSize(160, 70))
+            self.top_model.appendRow(item)
 
-    def show_preview(self, path: str):
-        self.current_preview_path = path
-        self.update_preview_zoom()
+    def _on_item_clicked(self, index):
+        row = index.row()
+        if 0 <= row < len(self.current_pays):
+            self.show_pay_preview(self.current_pays[row])
 
-    def update_preview_zoom(self):
-        if not self.current_preview_path:
-            return
-        pixmap = QPixmap(self.current_preview_path)
-        if not pixmap.isNull():
-            size = self.zoom_slider.value()
-            self.preview_lbl.setPixmap(
-                pixmap.scaled(
-                    size,
-                    size,
-                    Qt.AspectRatioMode.KeepAspectRatio,
-                    Qt.TransformationMode.SmoothTransformation,
+    def show_pay_preview(self, pay: EmittedPay | ReceivedPay):
+        url = str(pay.url)
+        if not url or url.endswith("supports.svg") or not Path(url).exists():
+            mode = "emitted" if isinstance(pay, EmittedPay) else "received"
+            data = {
+                "pay_id": str(pay.pay_id),
+                "specific_id": (
+                    str(pay.pay_emitted_id)
+                    if isinstance(pay, EmittedPay)
+                    else str(pay.received_pay_id)
+                ),
+                "person_id": str(pay.person_id),
+                "date": str(pay.date),
+                "reason": str(pay.reason),
+                "method": str(pay.method),
+                "is_advance": bool(pay.is_advance),
+                "amount": float(pay.amount),
+                "recipient_account": (
+                    str(pay.recipient_account) if isinstance(pay, EmittedPay) else ""
+                ),
+                "interest": float(pay.interest) if isinstance(pay, ReceivedPay) else 0.0,
+                "net_amount": (
+                    float(pay.net_amount or pay.amount)
+                    if isinstance(pay, ReceivedPay)
+                    else float(pay.amount)
+                ),
+            }
+            url = self.generate_receipt_files(data, mode)
+        self.show_image(url)
+
+    def show_image(self, url: str):
+        self.current_image = url
+        self.change_zoom()
+
+    def change_zoom(self):
+        if self.current_image:
+            pixmap = QPixmap(self.current_image)
+            if not pixmap.isNull():
+                size = self.slider.value()
+                self.image_label.setPixmap(
+                    pixmap.scaled(
+                        size,
+                        size,
+                        Qt.AspectRatioMode.KeepAspectRatio,
+                        Qt.TransformationMode.SmoothTransformation,
+                    )
                 )
-            )
 
     def generate_receipt_files(self, data: dict, mode: str) -> str:
         supports_dir = Path(__file__).resolve().parents[3] / "assets" / "supports"
@@ -185,19 +211,42 @@ class RegistersController:
         image.save(str(img_path))
         return str(img_path)
 
+    def export_pay(self, pay: EmittedPay | ReceivedPay):
+        file_path, _ = QFileDialog.getSaveFileName(
+            self.view,
+            "Guardar Comprobante",
+            f"comprobante_{pay.pay_id}.pdf",
+            "PDF (*.pdf);;CSV (*.csv)",
+        )
+        if not file_path:
+            return
+        row = {k: str(v) for k, v in vars(pay).items()}
+        if file_path.endswith(".csv"):
+            pd.DataFrame([row]).to_csv(file_path, index=False)
+        else:
+            writer = QPdfWriter(file_path)
+            doc = QTextDocument()
+            html = "<h2>Comprobante de Pago</h2>" + "".join(
+                f"<p><b>{k}:</b> {v}</p>" for k, v in row.items()
+            )
+            doc.setHtml(html)
+            doc.print_(writer)
+        QMessageBox.information(self.view, "Listo", f"Guardado en {file_path}")
+
     def open_add_dialog(self):
         dialog = PayDialog(mode=self.current_mode, parent=self.view)
         if dialog.exec():
             data = dialog.get_data()
             try:
-                if not data["url"]:
-                    data["url"] = self.generate_receipt_files(data, self.current_mode)
+                url_val = data["url"] or self.generate_receipt_files(
+                    data, self.current_mode
+                )
                 if self.current_mode == "emitted":
                     pay = EmittedPay(
                         person_id=NonEmptyString(data["person_id"]),
                         pay_id=NonEmptyString(data["pay_id"]),
                         date=NonEmptyString(data["date"]),
-                        url=NonEmptyString(data["url"]),
+                        url=NonEmptyString(url_val),
                         amount=float(data["amount"]),
                         method=NonEmptyString(data["method"]),
                         reason=NonEmptyString(data["reason"]),
@@ -207,11 +256,11 @@ class RegistersController:
                     )
                     self.save_emitted_uc.execute(pay)
                 else:
-                    pay = ReceivedPay(
+                    received_pay = ReceivedPay(
                         person_id=NonEmptyString(data["person_id"]),
                         pay_id=NonEmptyString(data["pay_id"]),
                         date=NonEmptyString(data["date"]),
-                        url=NonEmptyString(data["url"]),
+                        url=NonEmptyString(url_val),
                         amount=float(data["amount"]),
                         method=NonEmptyString(data["method"]),
                         reason=NonEmptyString(data["reason"]),
@@ -220,27 +269,28 @@ class RegistersController:
                         net_amount=float(data["net_amount"]),
                         interest=float(data["interest"]),
                     )
-                    self.save_received_uc.execute(pay)
+                    self.save_received_uc.execute(received_pay)
                 self.load_pays()
             except Exception as e:
                 QMessageBox.warning(self.view, "Error de validación", str(e))
 
     def load_pays(self, pays: list | None = None):
-        self.update_metrics()
+        self.load_top_metrics()
         if pays is None:
             if self.current_mode == "emitted":
                 pays = self.find_all_emitted_uc.execute() or []
             else:
                 pays = self.find_all_received_uc.execute() or []
 
+        self.current_pays = list(pays)
         self.list_model.clear()
         for pay in pays:
             if isinstance(pay, EmittedPay):
-                txt = f"[Compra {pay.pay_emitted_id}] ${pay.amount:,.2f} - Tercero: {pay.person_id}\n{pay.date} | {pay.method} | {pay.reason}"
+                text = f"[Compra {pay.pay_emitted_id}] ${pay.amount:,.2f} | Tercero: {pay.person_id} | {pay.date}"
             else:
-                txt = f"[Venta {pay.received_pay_id}] Neto: ${pay.net_amount:,.2f} (Int: {pay.interest}%)\n{pay.date} | Tercero: {pay.person_id} | {pay.reason}"
+                text = f"[Venta {pay.received_pay_id}] Neto: ${pay.net_amount:,.2f} (Int: {pay.interest}%) | Tercero: {pay.person_id}"
 
-            item = QStandardItem(txt)
+            item = QStandardItem(text)
             item.setEditable(False)
             item.setSizeHint(QSize(0, 75))
             item.setIcon(QIcon(str(pay.url)))
@@ -250,78 +300,47 @@ class RegistersController:
             row_widget = QWidget()
             row_widget.setStyleSheet("background-color: transparent;")
             item_layout = QHBoxLayout(row_widget)
-            item_layout.setContentsMargins(0, 0, 8, 0)
+            item_layout.setContentsMargins(0, 0, 12, 0)
             item_layout.addStretch()
 
-            ver_btn = QPushButton("Ver")
-            pdf_btn = QPushButton("Exportar")
+            view_btn = QPushButton("Ver")
+            pdf_btn = QPushButton("PDF/CSV")
             edit_btn = QPushButton("Editar")
-            del_btn = QPushButton("Eliminar")
+            delete_btn = QPushButton("Eliminar")
+            edit_btn.setStyleSheet("background-color: #6B5724; color: #FFFFFF;")
+            delete_btn.setStyleSheet("background-color: #C62828; color: #FFFFFF;")
 
-            ver_btn.clicked.connect(
-                lambda checked=False, p=pay: self.show_preview(str(p.url))
+            view_btn.clicked.connect(
+                lambda checked=False, p=pay: self.show_pay_preview(p)
             )
             pdf_btn.clicked.connect(lambda checked=False, p=pay: self.export_pay(p))
-            edit_btn.setStyleSheet("background-color: #6B5724; color: #FFFFFF;")
             edit_btn.clicked.connect(
                 lambda checked=False, p=pay: self.open_edit_dialog(p)
             )
-            del_btn.setStyleSheet("background-color: #C62828; color: #FFFFFF;")
-            del_btn.clicked.connect(lambda checked=False, p=pay: self.delete_pay(p))
+            delete_btn.clicked.connect(lambda checked=False, p=pay: self.delete_pay(p))
 
-            item_layout.addWidget(ver_btn)
+            item_layout.addWidget(view_btn)
             item_layout.addWidget(pdf_btn)
             item_layout.addWidget(edit_btn)
-            item_layout.addWidget(del_btn)
+            item_layout.addWidget(delete_btn)
             self.view.ui.listView_2.setIndexWidget(index, row_widget)
-
-    def export_pay(self, pay: EmittedPay | ReceivedPay):
-        file_path, _ = QFileDialog.getSaveFileName(
-            self.view,
-            "Exportar Comprobante (PDF, CSV o Excel)",
-            f"comprobante_{pay.pay_id}.pdf",
-            "PDF (*.pdf);;CSV (*.csv);;Excel (*.xlsx)",
-        )
-        if not file_path:
-            return
-        try:
-            row = {k: str(v) for k, v in vars(pay).items()}
-            if file_path.endswith(".xlsx"):
-                try:
-                    pd.DataFrame([row]).to_excel(file_path, index=False)
-                except ImportError:
-                    csv_fallback = file_path.replace(".xlsx", ".csv")
-                    pd.DataFrame([row]).to_csv(csv_fallback, index=False)
-                    file_path = csv_fallback
-            elif file_path.endswith(".csv"):
-                pd.DataFrame([row]).to_csv(file_path, index=False)
-            else:
-                writer = QPdfWriter(file_path)
-                doc = QTextDocument()
-                html = "<h2>Comprobante de Pago</h2><hr/>" + "".join(
-                    f"<p><b>{k}:</b> {v}</p>" for k, v in row.items()
-                )
-                doc.setHtml(html)
-                doc.print_(writer)
-            QMessageBox.information(
-                self.view, "Exportado", f"Comprobante guardado en:\n{file_path}"
-            )
-        except Exception as e:
-            QMessageBox.warning(self.view, "Error al exportar", str(e))
 
     def open_edit_dialog(self, pay: EmittedPay | ReceivedPay):
         dialog = PayDialog(mode=self.current_mode, pay=pay, parent=self.view)
         if dialog.exec():
             data = dialog.get_data()
             try:
-                if not data["url"]:
-                    data["url"] = self.generate_receipt_files(data, self.current_mode)
+                url_val = (
+                    data["url"]
+                    if data["url"] and not str(data["url"]).endswith("supports.svg")
+                    else self.generate_receipt_files(data, self.current_mode)
+                )
                 if self.current_mode == "emitted":
-                    updated = EmittedPay(
+                    updated_emitted = EmittedPay(
                         person_id=NonEmptyString(data["person_id"]),
                         pay_id=NonEmptyString(data["pay_id"]),
                         date=NonEmptyString(data["date"]),
-                        url=NonEmptyString(data["url"]),
+                        url=NonEmptyString(url_val),
                         amount=float(data["amount"]),
                         method=NonEmptyString(data["method"]),
                         reason=NonEmptyString(data["reason"]),
@@ -329,13 +348,13 @@ class RegistersController:
                         pay_emitted_id=NonEmptyString(data["specific_id"]),
                         recipient_account=NonEmptyString(data["recipient_account"]),
                     )
-                    self.update_emitted_uc.execute(updated)
+                    self.update_emitted_uc.execute(updated_emitted)
                 else:
-                    updated = ReceivedPay(
+                    updated_received = ReceivedPay(
                         person_id=NonEmptyString(data["person_id"]),
                         pay_id=NonEmptyString(data["pay_id"]),
                         date=NonEmptyString(data["date"]),
-                        url=NonEmptyString(data["url"]),
+                        url=NonEmptyString(url_val),
                         amount=float(data["amount"]),
                         method=NonEmptyString(data["method"]),
                         reason=NonEmptyString(data["reason"]),
@@ -344,16 +363,16 @@ class RegistersController:
                         net_amount=float(data["net_amount"]),
                         interest=float(data["interest"]),
                     )
-                    self.update_received_uc.execute(updated)
+                    self.update_received_uc.execute(updated_received)
                 self.load_pays()
             except Exception as e:
-                QMessageBox.warning(self.view, "Error al editar", str(e))
+                QMessageBox.warning(self.view, "Error de validación", str(e))
 
     def delete_pay(self, pay: EmittedPay | ReceivedPay):
         confirm = QMessageBox.question(
             self.view,
             "Confirmar eliminación",
-            f"¿Eliminar soporte {pay.pay_id}?",
+            f"¿Estás seguro de eliminar el soporte [{pay.pay_id}]?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
         if confirm == QMessageBox.StandardButton.Yes:
@@ -367,21 +386,21 @@ class RegistersController:
                 QMessageBox.warning(self.view, "Error al eliminar", str(e))
 
     def search_pays(self):
-        q = self.view.ui.lineEdit.text().strip().lower()
+        data = self.view.ui.lineEdit.text().strip().lower()
         pays = (
             self.find_all_emitted_uc.execute()
             if self.current_mode == "emitted"
             else self.find_all_received_uc.execute()
         ) or []
-        filtered = [
-            p for p in pays if any(q in str(v).lower() for v in vars(p).values())
+        filtered_pays = [
+            p for p in pays if any(data in str(v).lower() for v in vars(p).values())
         ]
-        self.load_pays(filtered)
+        self.load_pays(filtered_pays)
 
     def filter_pays(self):
         methods = ["Todos", "Efectivo", "Transferencia", "Tarjeta", "Nequi/Daviplata"]
         method, ok = QInputDialog.getItem(
-            self.view, "Filtrar por Método", "Método:", methods, 0, False
+            self.view, "Filtrar por método", "Método:", methods, 0, False
         )
         if ok:
             pays = (
