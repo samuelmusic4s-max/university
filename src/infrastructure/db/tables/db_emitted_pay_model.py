@@ -2,7 +2,7 @@ from sqlalchemy import Column, String, ForeignKey
 from src.infrastructure.db.db_connection import Base
 
 
-class EmittedPay(Base):
+class EmittedPayModel(Base):
     __tablename__ = "emitted_pays"
 
     pay_id = Column(String, ForeignKey("pays.pay_id"), nullable=False)

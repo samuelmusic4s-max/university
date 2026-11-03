@@ -7,7 +7,13 @@ from ui.views.product_dialog import ProductDialog
 from src.domain.value_objects.non_empty_string import NonEmptyString
 from src.application.services.update_product_use_case import UpdateProductUseCase
 from src.application.services.delete_product_use_case import DeleteProductUseCase
-from PySide6.QtWidgets import QMessageBox, QWidget, QHBoxLayout, QPushButton
+from PySide6.QtWidgets import (
+    QMessageBox,
+    QWidget,
+    QHBoxLayout,
+    QPushButton,
+    QInputDialog,
+)
 from PySide6.QtCore import QSize
 from PySide6.QtGui import QIcon
 
@@ -34,6 +40,7 @@ class InventoryController:
         self.view.ui.pushButton_2.clicked.connect(self.open_add_dialog)
         self.view.ui.pushButton.clicked.connect(self.search_products)
         self.view.ui.lineEdit.textChanged.connect(self.search_products)
+        self.view.ui.pushButton_3.clicked.connect(self.filter_products)
 
         self.load_products()
 
@@ -134,3 +141,14 @@ class InventoryController:
                 self.load_products()
             except Exception as e:
                 QMessageBox.warning(self.view, "Error al eliminar", str(e))
+
+    def filter_products(self):
+        estados = ["Todos", "Disponible", "Agotado", "En fabricación"]
+        estado, ok = QInputDialog.getItem(
+            self.view, "Filtrar por Estado", "Estado:", estados, 0, False
+        )
+        if ok:
+            products = self.find_all_uc.execute() or []
+            if estado != "Todos":
+                products = [p for p in products if str(p.state) == estado]
+            self.load_products(products)
