@@ -1,0 +1,132 @@
+QWidget {
+    font-family: 'Segoe UI', Arial, sans-serif;
+    font-size: 13px;
+    color: #262115;
+    background-color: #F9F6E8;
+}
+
+QWidget#widget_2,
+QWidget#widget_3,
+QWidget#widget_4,
+QWidget#widget_5,
+QWidget#widget_6,
+QWidget#widget_7 {
+    background-color: #FFFFFF;
+    border: 1px solid #DED7BE;
+    border-radius: 8px;
+}
+
+QComboBox {
+    background-color: #FFFFFF;
+    color: #262115;
+    border: 1px solid #DED7BE;
+    border-radius:6px;
+    padding: 5px 10px;
+}
+
+NavigationBarView, NavigationBarView QWidget#widget {
+    background-color: #C2E2BC;
+    border-right: 1px solid #DED7BE;
+}
+
+NavigationBarView QToolButton {
+    background-color: transparent;
+    color: #1F291E;
+    font-weight: bold;
+    font-size: 13px;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    padding: 6px;
+}
+
+NavigationBarView QToolButton:hover {
+    background-color: #B0D9A8;
+}
+
+NavigationBarView QToolButton:pressed {
+    background-color: #9BC992;
+}
+
+QLabel {
+    background-color: transparent;
+    color: #5A481D;
+}
+
+QLabel#label {
+    font-size: 26px;
+    font-weight: bold;
+    color: #5A481D;
+}
+
+QLineEdit {
+    background-color: #FFFFFF;
+    color: #262115;
+    border: 1px solid #DED7BE;
+    border-radius: 6px;
+    padding: 6px 10px;
+}
+
+QLineEdit:focus {
+    border: 2px solid #C89D3C;
+}
+
+QPushButton {
+    background-color: #6B5724;
+    color: #FFFFFF;
+    font-weight: bold;
+    border: none;
+    border-radius: 6px;
+    padding: 7px 16px;
+}
+
+QPushButton:hover {
+    background-color: #52421A;
+}
+
+QPushButton:pressed {
+    background-color: #3D3113;
+}
+
+QListView {
+    background-color: #FFFFFF;
+    border: 1px solid #DED7BE;
+    border-radius: 8px;
+    padding: 5px;
+}
+
+QListView::item {
+    padding: 8px;
+    border-radius: 4px;
+}
+
+QListView::item:selected {
+    background-color: #6B5724;
+    color: #FFFFFF;
+}
+
+.badge-success {
+    background-color: #E8F5E9;
+    color: #2E7D32;
+    border: 1px solid #2E7D32;
+    border-radius: 4px;
+    padding: 2px 6px;
+    font-weight: bold;
+}
+
+.badge-warning {
+    background-color: #FEF3C7;
+    color: #D97706;
+    border: 1px solid #D97706;
+    border-radius: 4px;
+    padding: 2px 6px;
+    font-weight: bold;
+}
+
+.badge-danger {
+    background-color: #FFEBEE;
+    color: #C62828;
+    border: 1px solid #C62828;
+    border-radius: 4px;
+    padding: 2px 6px;
+    font-weight: bold;
+}

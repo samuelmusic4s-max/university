@@ -1,0 +1,2 @@
+class InvalidRepositoryError(Exception):
+    pass

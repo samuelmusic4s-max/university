@@ -1,0 +1,2 @@
+class InvalidStringError(Exception):
+    pass
